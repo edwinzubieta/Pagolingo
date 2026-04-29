@@ -1,0 +1,58 @@
+@startuml Seq_Carga_Inicial
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+SHOW_INDEX()
+
+title Diagrama de Secuencia — Carga Inicial de la Aplicación LSC
+
+' ── Participantes ──
+Person(estudiante, "Estudiante de LSC", "Abre la aplicación en su navegador")
+
+System_Ext(navegador, "Navegador Web", "Chrome / Firefox / Edge")
+
+Container_Boundary(spa, "Aplicación Web SPA (React)")
+    Container(app_shell, "App Shell / Router", "React Router")
+    Container(model_loader, "Cargador del Modelo ML", "ONNX Runtime Web")
+    Container(module_loader, "Cargador de Módulos", "Fetch API")
+    Container(selector, "Selector de Módulos", "React Component")
+Boundary_End()
+
+Container(servidor, "Servidor Estático", "Hosting (GitHub Pages / Vercel)")
+Container(modelo_onnx, "Modelo .onnx", "~1-2MB Asset estático")
+Container(index_json, "modules-index.json", "Registro de módulos")
+
+' ── Flujo: Carga de la página ──
+Rel(estudiante, navegador, "Abre URL de la aplicación", "https://...")
+Rel(navegador, servidor, "Solicita index.html + bundle JS", "HTTP GET")
+Rel(servidor, navegador, "Retorna SPA React (HTML + JS + CSS)", "~500KB")
+Rel(navegador, app_shell, "Ejecuta React, monta App Shell", "DOM render")
+
+' ── Flujo: Carga paralela de recursos ──
+group Parallel [Carga de recursos al montar la aplicación]
+
+    Rel(app_shell, model_loader, "Inicia carga del modelo ML", "useEffect()")
+    Rel(model_loader, servidor, "Descarga archivo .onnx", "HTTP GET")
+    Rel(servidor, model_loader, "Retorna modelo (~1-2MB)", "application/octet-stream")
+    Rel(model_loader, model_loader, "Crea InferenceSession de ONNX Runtime Web", "ort.InferenceSession.create()")
+    Rel(model_loader, app_shell, "Notifica: modelo listo (isReady=true)", "setState")
+
+    Rel(app_shell, module_loader, "Inicia carga del índice de módulos", "useEffect()")
+    Rel(module_loader, index_json, "Descarga modules-index.json", "Fetch API")
+    Rel(index_json, module_loader, "Retorna lista de módulos disponibles", "JSON")
+    Rel(module_loader, module_loader, "Valida estructura del índice", "validateSchema()")
+    Rel(module_loader, app_shell, "Notifica: módulos disponibles", "setState")
+
+end
+
+' ── Flujo: Inicialización de MediaPipe ──
+Rel(app_shell, app_shell, "Inicializa MediaPipe Hands (descarga WASM assets)", "lazy load")
+
+' ── Flujo: Pantalla lista ──
+Rel(app_shell, selector, "Renderiza Selector de Módulos con datos cargados", "props")
+Rel(selector, estudiante, "Muestra pantalla principal con módulos disponibles", "UI lista")
+
+SHOW_LEGEND()
+
+@enduml

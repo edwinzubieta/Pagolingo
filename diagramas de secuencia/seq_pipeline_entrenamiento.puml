@@ -1,0 +1,90 @@
+@startuml Seq_Pipeline_Entrenamiento
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+SHOW_INDEX()
+
+title Diagrama de Secuencia — Pipeline de Entrenamiento del Modelo (Offline)
+
+' ── Participantes ──
+Person(investigador, "Equipo de Desarrollo", "Ejecuta el pipeline de entrenamiento")
+
+Container_Boundary(pipeline, "Pipeline de Entrenamiento (Python)")
+    Container(extractor, "Extractor de Landmarks", "Python + MediaPipe")
+    Container(preprocesador, "Preprocesador", "Python + pandas")
+    Container(trainer_svm, "Entrenador SVM", "scikit-learn")
+    Container(trainer_rf, "Entrenador RF", "scikit-learn")
+    Container(evaluador, "Evaluador Comparativo", "scikit-learn")
+    Container(exportador, "Exportador ONNX", "skl2onnx")
+    Container(registrador, "Registrador", "sqlite3")
+Boundary_End()
+
+Container(recursos, "Videos / Imágenes LSC", "Archivos multimedia")
+Container(dataset, "Dataset CSV", "~2.100 muestras")
+ContainerDb(sqlite, "SQLite", "Trazabilidad")
+Container(modelo_onnx, "Modelo .onnx", "Archivo de salida")
+
+' ── Fase 1: Extracción de landmarks y Pose (CORREGIDO) ──
+Rel(investigador, extractor, "Ejecuta script de extracción de landmarks", "python extract.py")
+Rel(extractor, recursos, "Lee videos e imágenes de señas (Dataset LSC-54)", "file I/O")
+
+group Loop [Por cada video/imagen de seña]
+    Rel(extractor, extractor, "Ejecuta MediaPipe Hands y Pose", "mp.solutions")
+    Rel(extractor, extractor, "Extrae 21 landmarks de mano + Pose Anchors (hombros/nariz)", "process()")
+    Rel(extractor, extractor, "Aplica normalización antropométrica (invariante a escala)", "normalize_landmarks()")
+    Rel(extractor, dataset, "Guarda vector [63 features normalizados + etiqueta] en CSV", "append row")
+end
+
+' ── Fase 2: Preprocesamiento ──
+Rel(investigador, preprocesador, "Ejecuta preprocesamiento del dataset", "python preprocess.py")
+Rel(preprocesador, dataset, "Lee dataset completo", "pd.read_csv()")
+Rel(preprocesador, preprocesador, "Limpia muestras con landmarks faltantes o ruidosos", "dropna/filter")
+Rel(preprocesador, preprocesador, "Verifica balanceo de clases (27 señas)", "value_counts()")
+Rel(preprocesador, preprocesador, "Divide en train (80%) y test (20%)", "train_test_split()")
+
+' ── Fase 3: Entrenamiento dual ──
+Rel(investigador, trainer_svm, "Inicia entrenamiento SVM", "python train.py --model svm")
+Rel(investigador, trainer_rf, "Inicia entrenamiento Random Forest", "python train.py --model rf")
+
+group Parallel [Entrenamiento de ambos modelos]
+
+    Rel(trainer_svm, trainer_svm, "Entrena SVM con kernel RBF", "SVC(kernel='rbf')")
+    Rel(trainer_svm, trainer_svm, "Búsqueda de hiperparámetros (C, gamma)", "GridSearchCV")
+    Rel(trainer_svm, trainer_svm, "Evalúa con cross-validation", "cv=5")
+    Rel(trainer_svm, evaluador, "Entrega modelo SVM + métricas train", "fitted model")
+
+    Rel(trainer_rf, trainer_rf, "Entrena Random Forest (n árboles)", "RandomForestClassifier()")
+    Rel(trainer_rf, trainer_rf, "Calcula importancia de features por landmark", "feature_importances_")
+    Rel(trainer_rf, evaluador, "Entrega modelo RF + métricas train + importancias", "fitted model")
+
+end
+
+' ── Fase 4: Evaluación comparativa ──
+Rel(evaluador, evaluador, "Evalúa SVM en conjunto de prueba", "accuracy, precision, recall")
+Rel(evaluador, evaluador, "Evalúa RF en conjunto de prueba", "accuracy, precision, recall")
+Rel(evaluador, evaluador, "Genera matrices de confusión para ambos modelos", "confusion_matrix()")
+Rel(evaluador, evaluador, "Compara métricas y selecciona modelo ganador", "max(accuracy)")
+
+alt SVM tiene mejor accuracy
+    Rel(evaluador, exportador, "Envía modelo SVM como ganador", "best_model = svm")
+else Random Forest tiene mejor accuracy
+    Rel(evaluador, exportador, "Envía modelo RF como ganador", "best_model = rf")
+end
+
+' ── Fase 5: Exportación ──
+Rel(exportador, exportador, "Convierte modelo scikit-learn a formato ONNX", "convert_sklearn()")
+Rel(exportador, exportador, "Valida que predicciones ONNX == predicciones originales", "assert_equal")
+Rel(exportador, modelo_onnx, "Guarda archivo modelo_v{N}.onnx (~1-2MB)", "file write")
+
+' ── Fase 6: Registro de trazabilidad ──
+Rel(evaluador, registrador, "Envía metadatos de la sesión de entrenamiento", "dict")
+Rel(registrador, sqlite, "INSERT: fecha, modelo, métricas, fuente, versión .onnx", "sqlite3")
+Rel(registrador, investigador, "Confirma registro exitoso de trazabilidad", "log")
+
+' ── Resultado final ──
+Rel(investigador, modelo_onnx, "Copia modelo .onnx a public/models/ del proyecto React", "cp/mv")
+
+SHOW_LEGEND()
+
+@enduml

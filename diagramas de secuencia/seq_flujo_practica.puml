@@ -1,0 +1,78 @@
+@startuml Seq_Flujo_Practica
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+SHOW_INDEX()
+
+title Diagrama de Secuencia — Flujo Principal de Práctica de una Seña LSC
+
+' ── Participantes ──
+Person(estudiante, "Estudiante de LSC", "Usuario que practica")
+
+Container_Boundary(spa, "Aplicación Web SPA (React)")
+    Container(ui_practica, "Pantalla de Práctica", "React Component")
+    Container(camara, "Componente de Cámara", "React + WebRTC")
+    Container(detector, "Detector de Landmarks", "MediaPipe Hands")
+    Container(clasificador, "Clasificador de Señas", "ONNX Runtime Web")
+    Container(feedback, "Motor de Feedback", "Lógica JS")
+    Container(feedback_ui, "UI de Retroalimentación", "React Component")
+Boundary_End()
+
+Container(modelo, "Modelo .onnx", "Asset estático")
+Container(json_mod, "abecedario.json", "JSON")
+Container(imagenes, "Imágenes de Referencia", "WebP/PNG")
+
+' ── Flujo: Selección de seña ──
+Rel(estudiante, ui_practica, "Selecciona la seña objetivo (ej: letra 'A')", "click")
+Rel(ui_practica, json_mod, "Obtiene datos de la seña seleccionada", "Fetch API")
+Rel(json_mod, ui_practica, "Retorna {id, imagen, descripcion}", "JSON")
+Rel(ui_practica, imagenes, "Carga imagen de referencia de la seña 'A'", "HTTP GET")
+Rel(ui_practica, feedback_ui, "Muestra imagen de referencia + estado IDLE", "props")
+
+' ── Flujo: Activación de cámara ──
+Rel(estudiante, ui_practica, "Presiona botón 'Iniciar Práctica'", "click")
+Rel(ui_practica, camara, "Activa componente de cámara", "render")
+Rel(camara, camara, "Solicita permiso de cámara al navegador", "getUserMedia()")
+
+' ── Flujo: Loop de detección en tiempo real ──
+group Loop [Por cada frame de video (~30fps)]
+
+    Rel(camara, detector, "Envía frame de video actual", "ImageData")
+    Rel(detector, detector, "Ejecuta modelo de detección de manos MediaPipe", "WASM")
+
+    alt Mano detectada en el frame
+        Rel(detector, clasificador, "Envía vector de 63 landmarks normalizados", "Float32Array")
+        Rel(clasificador, modelo, "Ejecuta inferencia del modelo .onnx", "session.run()")
+        Rel(modelo, clasificador, "Retorna logits de clasificación", "Float32Array")
+        Rel(clasificador, clasificador, "Aplica softmax para obtener probabilidades", "applySoftmax()")
+        Rel(clasificador, feedback, "Envía {label: 'A', confidence: 0.92}", "PredictionResult")
+        Rel(feedback, feedback, "Compara seña detectada vs seña objetivo", "evaluate()")
+
+        alt Confianza >= 85% (CORRECT_THRESHOLD) y estable por 5 frames
+            Rel(feedback, feedback_ui, "Estado: CORRECT + score 92%", "FeedbackResult")
+            Rel(feedback_ui, estudiante, "Muestra indicador VERDE + '¡Correcto!'", "UI visual")
+        else Confianza entre 50% y 85% (PARTIAL)
+            Rel(feedback, feedback_ui, "Estado: PARTIAL + score 67%", "FeedbackResult")
+            Rel(feedback_ui, estudiante, "Muestra indicador AMARILLO + 'Casi...'", "UI visual")
+        else Confianza < 50% o seña incorrecta (INCORRECT)
+            Rel(feedback, feedback_ui, "Estado: INCORRECT", "FeedbackResult")
+            Rel(feedback_ui, estudiante, "Muestra indicador ROJO + 'Intenta de nuevo'", "UI visual")
+        end
+
+    else Mano NO detectada en el frame
+        Rel(detector, feedback, "No se detectaron landmarks", "null")
+        Rel(feedback, feedback_ui, "Estado: IDLE", "FeedbackResult")
+        Rel(feedback_ui, estudiante, "Muestra 'Muestra tu mano a la cámara'", "UI visual")
+    end
+
+end
+
+' ── Flujo: Avanzar a siguiente seña ──
+Rel(estudiante, ui_practica, "Presiona 'Siguiente seña' (letra 'B')", "click")
+Rel(ui_practica, feedback, "Reset del motor de feedback", "reset()")
+Rel(ui_practica, imagenes, "Carga nueva imagen de referencia", "HTTP GET")
+
+SHOW_LEGEND()
+
+@enduml
