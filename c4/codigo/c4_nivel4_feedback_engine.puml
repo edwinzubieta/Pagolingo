@@ -1,0 +1,52 @@
+@startuml C4_Nivel4_FeedbackEngine
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+LAYOUT_TOP_DOWN()
+
+title Nivel 4 - Diagrama de Código\nComponente: Motor de Feedback
+
+' ── Tags ──
+AddElementTag("interface", $bgColor="#6366F1", $fontColor="#FFFFFF", $borderColor="#4F46E5", $shape=RoundedBoxShape(), $legendText="Interfaz / Tipo")
+AddElementTag("class", $bgColor="#1168BD", $fontColor="#FFFFFF", $borderColor="#0B4884", $legendText="Clase / Módulo")
+AddElementTag("function", $bgColor="#059669", $fontColor="#FFFFFF", $borderColor="#047857", $shape=RoundedBoxShape(), $legendText="Función")
+AddElementTag("enum", $bgColor="#D97706", $fontColor="#FFFFFF", $borderColor="#B45309", $shape=RoundedBoxShape(), $legendText="Enum / Constante")
+AddElementTag("hook", $bgColor="#DC2626", $fontColor="#FFFFFF", $borderColor="#B91C1C", $shape=RoundedBoxShape(), $legendText="React Hook")
+
+' ── Enums / Constantes ──
+Component(feedback_status, "FeedbackStatus", "TypeScript Enum", "Estados posibles del feedback:\n- IDLE: esperando detección\n- DETECTING: mano detectada, procesando\n- CORRECT: seña coincide con objetivo\n- INCORRECT: seña no coincide\n- PARTIAL: confianza entre umbrales", $tags="enum")
+
+Component(thresholds, "FeedbackThresholds", "Constantes", "Umbrales de decisión configurables:\n- CORRECT_THRESHOLD: 0.85 (85%)\n- PARTIAL_THRESHOLD: 0.50 (50%)\n- STABILITY_FRAMES: 5\n(frames consecutivos para confirmar)", $tags="enum")
+
+' ── Interfaces ──
+Component(feedback_result, "FeedbackResult", "TypeScript Interface", "Resultado del motor:\n{ status: FeedbackStatus,\ntargetSign: string,\ndetectedSign: string | null,\nconfidence: number,\nmessage: string }", $tags="interface")
+
+' ── Clase principal ──
+Component(feedback_engine, "FeedbackEngine", "Clase TypeScript", "Motor de evaluación que implementa la lógica de negocio educativa del sistema.\n\nAtributos:\n- targetSign: string (seña objetivo actual)\n- consecutiveMatches: number\n- lastPrediction: PredictionResult | null\n\nResponsabilidad: determinar si el usuario ejecutó correctamente la seña", $tags="class")
+
+' ── Métodos ──
+Component(evaluate, "evaluate(prediction, targetSign)", "Método público", "Método principal:\n1. Compara prediction.label con targetSign\n2. Si coinciden y confidence >= CORRECT_THRESHOLD → CORRECT\n3. Si coinciden y confidence >= PARTIAL_THRESHOLD → PARTIAL\n4. Si no coinciden → INCORRECT\n5. Aplica estabilización temporal (STABILITY_FRAMES)", $tags="function")
+
+Component(stabilize, "stabilizeResult(currentStatus)", "Método privado", "Implementa estabilización temporal para evitar parpadeo del feedback. Solo cambia el estado a CORRECT si se mantiene durante N frames consecutivos. Evita falsos positivos por predicciones momentáneas", $tags="function")
+
+Component(generate_message, "generateMessage(status, detected, target)", "Método privado", "Genera el mensaje de retroalimentación textual para el usuario según el estado:\n- CORRECT: '¡Correcto! Seña {target} ejecutada'\n- PARTIAL: 'Casi... ajusta tu posición'\n- INCORRECT: 'Intenta de nuevo'\n- IDLE: 'Muestra tu mano a la cámara'", $tags="function")
+
+Component(reset, "reset()", "Método público", "Reinicia el estado del motor al cambiar de seña objetivo. Limpia consecutiveMatches, lastPrediction y establece status = IDLE", $tags="function")
+
+' ── React Hook ──
+Component(use_feedback, "useFeedback(targetSign)", "React Custom Hook", "Hook que conecta el FeedbackEngine con el ciclo de vida de React:\n- Instancia FeedbackEngine en useRef\n- Expone evaluateFn para llamar desde el loop de detección\n- Retorna { feedbackResult, isCorrect } como estado reactivo\n- Llama reset() cuando targetSign cambia", $tags="hook")
+
+' ── Relaciones ──
+Rel_D(feedback_engine, evaluate, "Método principal de evaluación")
+Rel_D(feedback_engine, reset, "Reinicio al cambiar de seña objetivo")
+Rel_D(evaluate, stabilize, "Estabiliza resultado temporal")
+Rel_D(evaluate, generate_message, "Genera mensaje para el usuario")
+Rel_U(feedback_status, evaluate, "Enum de estados posibles")
+Rel_U(thresholds, evaluate, "Umbrales de decisión")
+Rel_U(feedback_result, evaluate, "Tipo de retorno")
+Rel_D(use_feedback, feedback_engine, "Instancia y gestiona ciclo de vida")
+
+SHOW_LEGEND()
+
+@endumld

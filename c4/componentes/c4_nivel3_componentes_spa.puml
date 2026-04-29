@@ -1,0 +1,96 @@
+@startuml C4_Nivel3_Componentes_SPA
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+' ── Tema ──
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+LAYOUT_TOP_DOWN()
+SHOW_PERSON_OUTLINE()
+
+title Nivel 3 - Diagrama de Componentes\nAplicación Web SPA (React) — Plataforma LSC
+
+' ── Sprites ──
+!define FONTAWESOME https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/font-awesome-5
+!include FONTAWESOME/route.puml
+!include FONTAWESOME/th_list.puml
+!include FONTAWESOME/chalkboard_teacher.puml
+!include FONTAWESOME/video.puml
+!include FONTAWESOME/hand_paper.puml
+!include FONTAWESOME/brain.puml
+!include FONTAWESOME/check_circle.puml
+!include FONTAWESOME/comment_dots.puml
+!include FONTAWESOME/folder_open.puml
+!include FONTAWESOME/download.puml
+
+' ── Tags por tipo de componente ──
+AddComponentTag("navigation", $bgColor="#6366F1", $fontColor="#FFFFFF", $borderColor="#4F46E5", $sprite="route", $legendText="Navegación")
+AddComponentTag("ui_screen", $bgColor="#1168BD", $fontColor="#FFFFFF", $borderColor="#0B4884", $sprite="chalkboard_teacher", $legendText="Pantalla / Vista")
+AddComponentTag("ui_list", $bgColor="#1168BD", $fontColor="#FFFFFF", $borderColor="#0B4884", $sprite="th_list", $legendText="Selector")
+AddComponentTag("camera", $bgColor="#0891B2", $fontColor="#FFFFFF", $borderColor="#0E7490", $sprite="video", $legendText="Acceso a cámara")
+AddComponentTag("detection", $bgColor="#059669", $fontColor="#FFFFFF", $borderColor="#047857", $sprite="hand_paper", $legendText="Detección landmarks")
+AddComponentTag("classification", $bgColor="#8B5CF6", $fontColor="#FFFFFF", $borderColor="#6D28D9", $sprite="brain", $legendText="Clasificación ML")
+AddComponentTag("feedback_logic", $bgColor="#D97706", $fontColor="#FFFFFF", $borderColor="#B45309", $sprite="check_circle", $legendText="Lógica de feedback")
+AddComponentTag("feedback_ui", $bgColor="#DC2626", $fontColor="#FFFFFF", $borderColor="#B91C1C", $sprite="comment_dots", $legendText="UI de retroalimentación")
+AddComponentTag("loader", $bgColor="#0284C7", $fontColor="#FFFFFF", $borderColor="#0369A1", $sprite="folder_open", $legendText="Cargador de datos")
+AddComponentTag("model_loader", $bgColor="#7C3AED", $fontColor="#FFFFFF", $borderColor="#6D28D9", $sprite="download", $legendText="Cargador de modelo")
+
+' ── Actor ──
+Person(estudiante, "Estudiante de LSC", "Practica señas del abecedario frente a su cámara web")
+
+' ── Boundary: SPA React ──
+Container_Boundary(spa, "Aplicación Web SPA — React") {
+
+    Component(router, "Router / App Shell", "React Router DOM", "Gestiona la navegación entre la pantalla de selección de módulos y la pantalla de práctica. Punto de entrada de la aplicación", $tags="navigation")
+
+    Component(modulo_selector, "Selector de Módulos", "React Component", "Pantalla principal que lista los módulos de aprendizaje disponibles (abecedario, y futuros módulos como saludos o números), cargados dinámicamente desde archivos JSON", $tags="ui_list")
+
+    Component(pantalla_practica, "Pantalla de Práctica", "React Component", "Vista principal del laboratorio digital: integra la cámara, la seña de referencia, el feedback visual y la navegación secuencial entre señas del módulo seleccionado", $tags="ui_screen")
+
+    Component(camara_component, "Componente de Cámara", "React + WebRTC", "Solicita acceso a la cámara del usuario mediante getUserMedia, renderiza el video en un elemento <video> y provee el stream de frames a MediaPipe para procesamiento", $tags="camera")
+
+    Component(detector_landmarks, "Detector de Landmarks", "MediaPipe Hands (JS/WASM)", "Recibe el stream de video frame a frame, ejecuta el modelo de detección de manos de Google y extrae 21 landmarks (63 coordenadas x,y,z normalizadas) en tiempo real", $tags="detection")
+
+    Component(clasificador, "Clasificador de Señas", "ONNX Runtime Web (JS/WASM)", "Recibe el vector de 63 landmarks normalizados, ejecuta la inferencia del modelo .onnx cargado en memoria y retorna la seña predicha junto con su score de confianza", $tags="classification")
+
+    Component(feedback_engine, "Motor de Feedback", "Lógica JavaScript", "Compara la seña clasificada por el modelo con la seña objetivo del módulo actual. Aplica umbrales de confianza para determinar acierto, error o estado intermedio. Gestiona la lógica de evaluación", $tags="feedback_logic")
+
+    Component(feedback_ui, "UI de Retroalimentación", "React Component + CSS", "Renderiza visualmente el resultado de la comparación: indicador de acierto/error con color y animación, porcentaje de confianza, e imagen de referencia de la seña objetivo actual", $tags="feedback_ui")
+
+    Component(module_loader, "Cargador de Módulos", "JavaScript / Fetch API", "Lee y parsea los archivos JSON de módulos desde public/data/, valida la estructura contra el esquema esperado (id, nombre, tipo, señas[]) y provee los datos al Selector y a la Pantalla de Práctica", $tags="loader")
+
+    Component(model_loader, "Cargador del Modelo ML", "JavaScript / ONNX Runtime Web", "Al iniciar la aplicación, descarga el archivo .onnx desde public/models/, crea una InferenceSession de ONNX Runtime Web y la mantiene en memoria durante toda la sesión del usuario", $tags="model_loader")
+}
+
+' ── Contenedores externos referenciados ──
+Container(json_files, "Archivos JSON de Módulos", "JSON", "abecedario.json y futuros módulos")
+Container(onnx_file, "Modelo .onnx", "Asset estático", "SVM o Random Forest (~1-2MB)")
+Container(ref_images, "Imágenes de Referencia", "WebP/PNG", "Imágenes de cada seña LSC en public/images/")
+
+' ── Relaciones del usuario ──
+Rel_D(estudiante, router, "Navega por la aplicación")
+
+' ── Relaciones internas de navegación ──
+Rel_D(router, modulo_selector, "Renderiza pantalla de selección")
+Rel_D(router, pantalla_practica, "Renderiza pantalla de práctica al seleccionar módulo")
+
+' ── Relaciones del flujo de datos ──
+Rel_D(modulo_selector, module_loader, "Solicita lista de módulos disponibles")
+Rel_D(pantalla_practica, camara_component, "Integra componente de cámara")
+Rel_D(pantalla_practica, feedback_ui, "Integra UI de retroalimentación")
+Rel_R(pantalla_practica, module_loader, "Obtiene señas del módulo seleccionado")
+
+' ── Flujo de procesamiento en tiempo real ──
+Rel_D(camara_component, detector_landmarks, "Stream de video frame a frame")
+Rel_D(detector_landmarks, clasificador, "Vector de 63 landmarks normalizados")
+Rel_D(clasificador, feedback_engine, "Seña predicha + score de confianza")
+Rel_D(feedback_engine, feedback_ui, "Estado de feedback (correcto / incorrecto / parcial)")
+
+' ── Relaciones con contenedores externos ──
+Rel_D(module_loader, json_files, "Fetch y parseo de archivos JSON")
+Rel_D(model_loader, onnx_file, "Descarga y carga modelo en InferenceSession")
+Rel_L(clasificador, model_loader, "Usa la InferenceSession cargada")
+Rel_D(feedback_ui, ref_images, "Muestra imagen de referencia de la seña actual")
+
+SHOW_LEGEND()
+
+@enduml

@@ -1,0 +1,48 @@
+@startuml C4_Nivel4_Clasificador
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+LAYOUT_TOP_DOWN()
+
+title Nivel 4 - Diagrama de Código\nComponente: Clasificador de Señas (ONNX Runtime Web)
+
+' ── Tags ──
+AddElementTag("interface", $bgColor="#6366F1", $fontColor="#FFFFFF", $borderColor="#4F46E5", $shape=RoundedBoxShape(), $legendText="Interfaz / Tipo")
+AddElementTag("class", $bgColor="#1168BD", $fontColor="#FFFFFF", $borderColor="#0B4884", $legendText="Clase / Módulo")
+AddElementTag("function", $bgColor="#059669", $fontColor="#FFFFFF", $borderColor="#047857", $shape=RoundedBoxShape(), $legendText="Función")
+AddElementTag("external_lib", $bgColor="#999999", $fontColor="#FFFFFF", $borderColor="#666666", $legendText="Librería externa")
+
+' ── Interfaces / Tipos ──
+Component(landmark_input, "LandmarkVector", "TypeScript Interface", "Interface que define el vector de entrada:\n{ landmarks: number[63] }\nCoordenadas x,y,z normalizadas de 21 puntos de mano extraídos por MediaPipe", $tags="interface")
+
+Component(prediction_output, "PredictionResult", "TypeScript Interface", "Interface que define el resultado:\n{ label: string, confidence: number,\nallProbabilities: Map<string, number> }\nSeña predicha con su score y probabilidades de todas las clases", $tags="interface")
+
+' ── Clase principal ──
+Component(sign_classifier, "SignClassifier", "Clase TypeScript", "Clase singleton que encapsula toda la lógica de clasificación.\n\nAtributos:\n- session: InferenceSession | null\n- labels: string[] (A-Z + Ñ)\n- isReady: boolean\n\nResponsabilidad: recibir landmarks, ejecutar inferencia y retornar predicción", $tags="class")
+
+' ── Funciones / Métodos ──
+Component(load_model, "loadModel(modelPath: string)", "Método async", "Descarga el archivo .onnx desde la ruta especificada, crea una InferenceSession de ONNX Runtime Web con backend WebAssembly, carga las etiquetas del modelo y establece isReady = true", $tags="function")
+
+Component(classify, "classify(landmarks: number[63])", "Método async", "Método principal de inferencia:\n1. Valida que la sesión esté cargada\n2. Crea un Float32Array con los landmarks\n3. Construye el Tensor de entrada\n4. Ejecuta session.run()\n5. Aplica softmax a las probabilidades\n6. Retorna PredictionResult con la clase de mayor score", $tags="function")
+
+Component(normalize, "normalizeLandmarks(raw: number[])", "Método privado", "Normaliza las coordenadas crudas de MediaPipe:\n1. Centra los landmarks respecto al punto de muñeca (wrist)\n2. Escala por la distancia máxima al centro\n3. Aplana el array a 63 valores [x0,y0,z0,...,x20,y20,z20]", $tags="function")
+
+Component(softmax, "applySoftmax(logits: number[])", "Método privado", "Convierte los logits crudos de salida del modelo a probabilidades normalizadas entre 0 y 1 que suman 1.0, permitiendo interpretar el score como porcentaje de confianza", $tags="function")
+
+' ── Librería externa ──
+Component(onnx_lib, "onnxruntime-web", "Librería npm", "ONNX Runtime Web v1.x\nClases usadas:\n- InferenceSession\n- Tensor\n- env (configuración de backend)", $tags="external_lib")
+
+' ── Relaciones ──
+Rel_D(sign_classifier, load_model, "Inicialización (una vez al cargar la app)")
+Rel_D(sign_classifier, classify, "Invocado por cada frame con landmarks detectados")
+Rel_D(classify, normalize, "Preprocesa landmarks antes de inferencia")
+Rel_D(classify, softmax, "Post-procesa salida del modelo")
+Rel_D(load_model, onnx_lib, "Crea InferenceSession")
+Rel_D(classify, onnx_lib, "Ejecuta session.run() con Tensor de entrada")
+Rel_U(landmark_input, classify, "Parámetro de entrada")
+Rel_U(prediction_output, classify, "Valor de retorno")
+
+SHOW_LEGEND()
+
+@enduml

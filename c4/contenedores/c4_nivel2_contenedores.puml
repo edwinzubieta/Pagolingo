@@ -1,0 +1,82 @@
+@startuml C4_Nivel2_Contenedores
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+' ── Tema y configuración visual ──
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+LAYOUT_TOP_DOWN()
+SHOW_PERSON_OUTLINE()
+
+title Nivel 2 - Diagrama de Contenedores\nPlataforma de Aprendizaje de Lengua de Señas Colombiana (LSC)
+
+' ── Sprites de tecnologías (Font Awesome) ──
+!define FONTAWESOME https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/font-awesome-5
+!include FONTAWESOME/react.puml
+!include FONTAWESOME/python.puml
+!include FONTAWESOME/database.puml
+!include FONTAWESOME/brain.puml
+!include FONTAWESOME/file_code.puml
+!include FONTAWESOME/images.puml
+!include FONTAWESOME/hand_paper.puml
+!include FONTAWESOME/cogs.puml
+
+' ── Tags personalizados ──
+AddElementTag("react_app", $bgColor="#1168BD", $fontColor="#FFFFFF", $borderColor="#0B4884", $shape=RoundedBoxShape(), $sprite="react", $legendText="Aplicación React")
+AddElementTag("ml_model", $bgColor="#8B5CF6", $fontColor="#FFFFFF", $borderColor="#6D28D9", $shape=RoundedBoxShape(), $sprite="brain", $legendText="Modelo de ML")
+AddElementTag("detection", $bgColor="#059669", $fontColor="#FFFFFF", $borderColor="#047857", $shape=RoundedBoxShape(), $sprite="hand_paper", $legendText="Detección MediaPipe")
+AddElementTag("runtime", $bgColor="#D97706", $fontColor="#FFFFFF", $borderColor="#B45309", $shape=RoundedBoxShape(), $sprite="cogs", $legendText="Runtime de inferencia")
+AddElementTag("data_file", $bgColor="#0284C7", $fontColor="#FFFFFF", $borderColor="#0369A1", $shape=RoundedBoxShape(), $sprite="file_code", $legendText="Archivos de datos")
+AddElementTag("static_asset", $bgColor="#0891B2", $fontColor="#FFFFFF", $borderColor="#0E7490", $shape=RoundedBoxShape(), $sprite="images", $legendText="Assets estáticos")
+AddElementTag("python_script", $bgColor="#3B82F6", $fontColor="#FFFFFF", $borderColor="#2563EB", $sprite="python", $legendText="Script Python")
+AddElementTag("sqlite_db", $bgColor="#F59E0B", $fontColor="#000000", $borderColor="#D97706", $sprite="database", $legendText="Base de datos SQLite")
+AddElementTag("dataset", $bgColor="#10B981", $fontColor="#FFFFFF", $borderColor="#059669", $legendText="Dataset de entrenamiento")
+
+AddRelTag("async", $lineColor="#707070", $textColor="#707070", $lineStyle = DashedLine(), $legendText="Relación offline / asíncrona")
+AddRelTag("realtime", $lineColor="#1168BD", $textColor="#1168BD", $legendText="Relación en tiempo real")
+
+' ── Actor ──
+Person(estudiante, "Estudiante de LSC", "Persona oyente que practica el abecedario LSC frente a la cámara web")
+
+' ── Boundary: Sistema Web (Runtime) ──
+System_Boundary(sistema_web, "Plataforma de Aprendizaje LSC — Runtime (Navegador)") {
+
+    Container(spa, "Aplicación Web SPA", "React 18+", "Interfaz de usuario que muestra los módulos de aprendizaje, la vista de cámara, la seña de referencia y el feedback visual en tiempo real al estudiante", $tags="react_app")
+
+    Container(mediapipe, "MediaPipe Hands", "JavaScript / WebAssembly", "Librería de Google que detecta y extrae 21 landmarks (63 coordenadas x, y, z normalizadas) de la mano del usuario en cada frame de video capturado", $tags="detection")
+
+    Container(onnx_runtime, "ONNX Runtime Web", "JavaScript / WebAssembly", "Motor de inferencia que ejecuta el modelo de clasificación .onnx directamente en el navegador con latencia aproximada de 5ms por clasificación", $tags="runtime")
+
+    Container(modelo, "Modelo de Clasificación .onnx", "SVM o Random Forest (~1-2MB)", "Modelo entrenado con scikit-learn, exportado a formato ONNX. Alojado como asset estático en public/models/ del proyecto React", $tags="ml_model")
+
+    Container(json_modulos, "Módulos de Contenido", "Archivos JSON", "Archivos JSON separados por módulo (abecedario.json) con la estructura estandarizada: id, nombre, tipo, y array de señas con id, imagen y descripción", $tags="data_file")
+
+    Container(imagenes, "Assets de Referencia", "Imágenes WebP/PNG", "Imágenes de referencia visual de cada seña del abecedario LSC, almacenadas en public/images/ del proyecto", $tags="static_asset")
+}
+
+' ── Boundary: Pipeline Offline ──
+System_Boundary(pipeline, "Pipeline de Entrenamiento — Offline (Python local)") {
+
+    Container(entrenamiento, "Script de Entrenamiento", "Python / scikit-learn / skl2onnx", "Pipeline que extrae landmarks de videos e imágenes de referencia, entrena modelos SVM y Random Forest en paralelo, compara métricas (accuracy, precisión, recall) y exporta el modelo ganador a formato .onnx", $tags="python_script")
+
+    ContainerDb(sqlite, "Base de Datos de Trazabilidad", "SQLite", "Registra metadatos de cada sesión de entrenamiento: qué señas se usaron, fecha, fuente del dato (propia o externa), modelo asociado, métricas obtenidas, versión del .onnx generado", $tags="sqlite_db")
+
+    Container(dataset, "Dataset de Entrenamiento", "CSV / ~2.100 muestras", "Vectores de 63 features (landmarks x, y, z normalizados de 21 puntos de mano) con etiquetas correspondientes a cada letra del abecedario LSC (A-Z + Ñ = 27 clases)", $tags="dataset")
+}
+
+' ── Relaciones Runtime (tiempo real) ──
+Rel_D(estudiante, spa, "Selecciona módulo, practica señas y recibe feedback", "HTTPS", $tags="realtime")
+Rel_D(spa, mediapipe, "Envía frames de video para extracción de landmarks", "", $tags="realtime")
+Rel_D(mediapipe, onnx_runtime, "Envía vector de 63 landmarks normalizados", "", $tags="realtime")
+Rel_D(onnx_runtime, modelo, "Carga y ejecuta inferencia del modelo", "", $tags="realtime")
+Rel_U(onnx_runtime, spa, "Retorna seña clasificada + score de confianza", "", $tags="realtime")
+Rel_R(spa, json_modulos, "Carga dinámicamente módulos disponibles", "Fetch API")
+Rel_R(spa, imagenes, "Muestra imagen de referencia de cada seña", "HTTP GET")
+
+' ── Relaciones Pipeline (offline) ──
+Rel_D(entrenamiento, dataset, "Lee muestras de landmarks etiquetadas", "", $tags="async")
+Rel_D(entrenamiento, sqlite, "Registra metadatos de entrenamiento", "", $tags="async")
+Rel_U(entrenamiento, modelo, "Exporta modelo ganador a .onnx", "skl2onnx", $tags="async")
+
+SHOW_LEGEND()
+
+@enduml

@@ -1,0 +1,74 @@
+@startuml C4_Nivel3_Componentes_Pipeline
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+' ── Tema ──
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+LAYOUT_TOP_DOWN()
+SHOW_PERSON_OUTLINE()
+
+title Nivel 3 - Diagrama de Componentes\nPipeline de Entrenamiento Offline (Python) — Plataforma LSC
+
+' ── Sprites ──
+!define FONTAWESOME https://raw.githubusercontent.com/tupadr3/plantuml-icon-font-sprites/master/font-awesome-5
+!include FONTAWESOME/hand_paper.puml
+!include FONTAWESOME/filter.puml
+!include FONTAWESOME/chart_line.puml
+!include FONTAWESOME/random.puml
+!include FONTAWESOME/trophy.puml
+!include FONTAWESOME/file_export.puml
+!include FONTAWESOME/clipboard_list.puml
+
+' ── Tags ──
+AddComponentTag("extractor", $bgColor="#059669", $fontColor="#FFFFFF", $borderColor="#047857", $sprite="hand_paper", $legendText="Extractor de features")
+AddComponentTag("preprocessor", $bgColor="#0284C7", $fontColor="#FFFFFF", $borderColor="#0369A1", $sprite="filter", $legendText="Preprocesamiento")
+AddComponentTag("trainer_svm", $bgColor="#8B5CF6", $fontColor="#FFFFFF", $borderColor="#6D28D9", $sprite="chart_line", $legendText="Entrenador SVM")
+AddComponentTag("trainer_rf", $bgColor="#7C3AED", $fontColor="#FFFFFF", $borderColor="#5B21B6", $sprite="random", $legendText="Entrenador Random Forest")
+AddComponentTag("evaluator", $bgColor="#D97706", $fontColor="#FFFFFF", $borderColor="#B45309", $sprite="trophy", $legendText="Evaluador comparativo")
+AddComponentTag("exporter", $bgColor="#DC2626", $fontColor="#FFFFFF", $borderColor="#B91C1C", $sprite="file_export", $legendText="Exportador ONNX")
+AddComponentTag("tracker", $bgColor="#0891B2", $fontColor="#FFFFFF", $borderColor="#0E7490", $sprite="clipboard_list", $legendText="Registrador de trazabilidad")
+
+' ── Actor ──
+Person(investigador, "Equipo de Desarrollo / Futura Cohorte", "Entrena y evalúa modelos de clasificación de señas LSC usando datos propios o de fuentes externas")
+
+' ── Boundary: Pipeline Python ──
+Container_Boundary(pipeline, "Pipeline de Entrenamiento — Python") {
+
+    Component(extractor, "Extractor de Landmarks", "Python + MediaPipe", "Procesa videos e imágenes de señas LSC. Ejecuta MediaPipe Hands sobre cada frame, extrae 21 landmarks de mano (63 coordenadas x,y,z normalizadas) y genera vectores de features con su etiqueta de seña correspondiente", $tags="extractor")
+
+    Component(preprocesador, "Preprocesador de Datos", "Python + pandas + NumPy", "Limpia datos con landmarks faltantes o ruidosos, normaliza coordenadas, y divide el dataset en conjuntos de entrenamiento (80%) y prueba (20%). Gestiona el balanceo de clases entre las 27 señas del abecedario LSC", $tags="preprocessor")
+
+    Component(entrenador_svm, "Entrenador SVM", "Python + scikit-learn", "Entrena un modelo Support Vector Machine con kernel RBF sobre los vectores de landmarks. Realiza búsqueda de hiperparámetros (C, gamma) mediante cross-validation para optimizar el rendimiento", $tags="trainer_svm")
+
+    Component(entrenador_rf, "Entrenador Random Forest", "Python + scikit-learn", "Entrena un modelo Random Forest con múltiples árboles de decisión. Genera métricas de importancia de features que permiten identificar qué landmarks son más determinantes para distinguir cada seña", $tags="trainer_rf")
+
+    Component(evaluador, "Evaluador Comparativo", "Python + scikit-learn + matplotlib", "Compara ambos modelos (SVM vs RF) usando accuracy, precisión y recall sobre el conjunto de prueba. Genera reportes de clasificación, matrices de confusión y selecciona el modelo ganador basado en evidencia empírica", $tags="evaluator")
+
+    Component(exportador, "Exportador ONNX", "Python + skl2onnx", "Convierte el modelo ganador de scikit-learn a formato .onnx compatible con ONNX Runtime Web. Valida que el modelo exportado produce las mismas predicciones que el original antes de guardarlo", $tags="exporter")
+
+    Component(registrador, "Registrador de Trazabilidad", "Python + sqlite3", "Registra en la base de datos cada sesión de entrenamiento: fecha, cantidad de muestras, fuente de datos (propia/externa), modelo usado (SVM/RF), métricas obtenidas, y nombre de la versión del archivo .onnx generado", $tags="tracker")
+}
+
+' ── Contenedores externos ──
+ContainerDb(sqlite, "SQLite", "Base de datos local", "Metadatos de trazabilidad de entrenamiento")
+Container(dataset, "Dataset", "CSV / ~2.100 muestras", "Vectores de 63 features etiquetados (A-Z + Ñ)")
+Container(modelo_onnx, "Modelo .onnx", "Archivo estático", "Modelo exportado para desplegar en el frontend React")
+Container(recursos, "Videos / Imágenes LSC", "Archivos multimedia", "Material de referencia de señas para extracción de landmarks")
+
+' ── Relaciones ──
+Rel_D(investigador, extractor, "Proporciona nuevos videos/imágenes de señas LSC")
+Rel_D(extractor, recursos, "Lee videos e imágenes de señas")
+Rel_D(extractor, preprocesador, "Genera vectores de 63 features etiquetados")
+Rel_R(preprocesador, dataset, "Lee/escribe dataset procesado")
+Rel_D(preprocesador, entrenador_svm, "Provee datos de entrenamiento y prueba")
+Rel_D(preprocesador, entrenador_rf, "Provee datos de entrenamiento y prueba")
+Rel_D(entrenador_svm, evaluador, "Entrega modelo SVM entrenado + métricas")
+Rel_D(entrenador_rf, evaluador, "Entrega modelo RF entrenado + métricas")
+Rel_D(evaluador, exportador, "Envía modelo ganador para exportación")
+Rel_D(exportador, modelo_onnx, "Genera archivo .onnx (~1-2MB)")
+Rel_R(evaluador, registrador, "Envía métricas y metadatos de la sesión")
+Rel_D(registrador, sqlite, "Almacena trazabilidad del entrenamiento")
+
+SHOW_LEGEND()
+
+@enduml

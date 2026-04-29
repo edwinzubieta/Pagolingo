@@ -1,0 +1,41 @@
+@startuml C4_Nivel1_Contexto
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+' ── Tema y configuración visual ──
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+LAYOUT_TOP_DOWN()
+SHOW_PERSON_OUTLINE()
+
+title Nivel 1 - Diagrama de Contexto del Sistema\nPlataforma de Aprendizaje de Lengua de Señas Colombiana (LSC)
+
+' ── Tags personalizados para distinguir elementos ──
+AddElementTag("webapp", $bgColor="#1168BD", $fontColor="#FFFFFF", $borderColor="#0B4884", $shape=RoundedBoxShape(), $legendText="Sistema principal")
+AddElementTag("hardware", $bgColor="#999999", $fontColor="#FFFFFF", $borderColor="#666666", $shape=RoundedBoxShape(), $legendText="Hardware del usuario")
+AddElementTag("browser", $bgColor="#438DD5", $fontColor="#FFFFFF", $borderColor="#2E6295", $shape=RoundedBoxShape(), $legendText="Entorno de ejecución")
+
+' ── Actores ──
+Person(estudiante, "Estudiante de LSC", "Persona oyente sin conocimientos previos de Lengua de Señas Colombiana que quiere aprender el abecedario de forma autónoma")
+
+' ── Sistema principal ──
+System(plataforma, "Plataforma de Aprendizaje LSC", "Aplicación web que permite practicar el abecedario de la Lengua de Señas Colombiana con retroalimentación en tiempo real mediante detección de landmarks de mano y clasificación por modelo de ML", $tags="webapp")
+
+' ── Sistemas externos ──
+System_Ext(navegador, "Navegador Web", "Chrome, Firefox o Edge con soporte para WebGL, WebAssembly y WebRTC (getUserMedia)", $tags="browser")
+System_Ext(camara, "Cámara Web", "Dispositivo de captura de video integrado o externo del computador del usuario", $tags="hardware")
+
+' ── Relaciones ──
+Rel_D(estudiante, plataforma, "Practica señas del abecedario LSC", "Interacción visual en tiempo real")
+Rel_D(plataforma, navegador, "Se ejecuta completamente en el navegador", "Client-side, sin backend")
+Rel_D(navegador, camara, "Accede al stream de video", "WebRTC / getUserMedia API")
+
+' ── Propiedades del sistema (tabla de metadatos) ──
+SetPropertyHeader("Propiedad", "Valor")
+AddProperty("Arquitectura", "Monolítica modular (ADR-01)")
+AddProperty("Alcance MVP", "Abecedario LSC estático (A-Z + Ñ)")
+AddProperty("Ejecución", "100% client-side, sin servidor en runtime")
+AddProperty("Universidad", "UMB - Proyecto de grado")
+
+SHOW_LEGEND()
+
+@enduml

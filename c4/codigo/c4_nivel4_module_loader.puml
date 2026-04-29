@@ -1,0 +1,54 @@
+@startuml C4_Nivel4_ModuleLoader
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+!theme C4_blue from https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/themes
+
+LAYOUT_TOP_DOWN()
+
+title Nivel 4 - Diagrama de Código\nComponente: Cargador de Módulos (Module Loader)
+
+' ── Tags ──
+AddElementTag("interface", $bgColor="#6366F1", $fontColor="#FFFFFF", $borderColor="#4F46E5", $shape=RoundedBoxShape(), $legendText="Interfaz / Tipo")
+AddElementTag("class", $bgColor="#1168BD", $fontColor="#FFFFFF", $borderColor="#0B4884", $legendText="Clase / Módulo")
+AddElementTag("function", $bgColor="#059669", $fontColor="#FFFFFF", $borderColor="#047857", $shape=RoundedBoxShape(), $legendText="Función")
+AddElementTag("hook", $bgColor="#DC2626", $fontColor="#FFFFFF", $borderColor="#B91C1C", $shape=RoundedBoxShape(), $legendText="React Hook")
+AddElementTag("data_file", $bgColor="#0284C7", $fontColor="#FFFFFF", $borderColor="#0369A1", $shape=RoundedBoxShape(), $legendText="Archivo de datos")
+
+' ── Interfaces / Tipos ──
+Component(sign_type, "Sign", "TypeScript Interface", "Tipo que define una seña individual:\n{ id: string,\nimagen: string (ruta relativa),\ndescripcion: string }", $tags="interface")
+
+Component(module_type, "LearningModule", "TypeScript Interface", "Tipo que define un módulo completo:\n{ id: string,\nnombre: string,\ntipo: 'estatico' | 'dinamico',\nsenas: Sign[] }\nEsquema definido en ADR-07", $tags="interface")
+
+Component(module_index, "ModuleIndex", "TypeScript Interface", "Tipo del registro central de módulos:\n{ modules: Array<{\nid: string, file: string\n}> }\nLista los módulos disponibles sin cargar su contenido", $tags="interface")
+
+' ── Funciones ──
+Component(fetch_index, "fetchModuleIndex()", "Función async", "Descarga y parsea el archivo modules-index.json desde public/data/. Retorna la lista de módulos disponibles (id + nombre de archivo) sin cargar el contenido completo de cada uno. Maneja errores de red con try/catch", $tags="function")
+
+Component(load_module, "loadModule(moduleId: string)", "Función async", "Dado un moduleId, busca el archivo correspondiente en el índice, lo descarga desde public/data/{moduleId}.json mediante Fetch API, valida su estructura contra el schema esperado y retorna el objeto LearningModule parseado", $tags="function")
+
+Component(validate_schema, "validateModuleSchema(data: unknown)", "Función", "Valida que el JSON descargado cumpla con la estructura definida en ADR-07:\n- Verifica campos requeridos (id, nombre, tipo, senas)\n- Verifica que cada seña tenga id, imagen, descripcion\n- Lanza error descriptivo si la validación falla, indicando qué campo falta o es inválido", $tags="function")
+
+Component(get_sign_image, "getSignImagePath(sign: Sign)", "Función", "Resuelve la ruta completa de la imagen de referencia de una seña dado su campo 'imagen' relativo. Retorna la URL absoluta apuntando a public/images/{path}", $tags="function")
+
+' ── React Hook ──
+Component(use_modules, "useModules()", "React Custom Hook", "Hook que gestiona la carga de módulos en React:\n- Llama fetchModuleIndex() en useEffect al montar\n- Expone { modules, loading, error }\n- Provee loadModule() para cargar un módulo específico\n- Cachea módulos ya cargados en useRef para evitar re-descargas", $tags="hook")
+
+' ── Archivos de datos ──
+Component(index_json, "modules-index.json", "Archivo JSON", "Registro central que lista los módulos disponibles:\n[{ id: 'abecedario', file: 'abecedario.json' }]\nUbicado en public/data/", $tags="data_file")
+
+Component(module_json, "abecedario.json", "Archivo JSON", "Módulo del abecedario LSC con 27 señas:\n{ id: 'abecedario', nombre: 'Abecedario LSC',\ntipo: 'estatico', senas: [{id:'A',...}, ...] }\nUbicado en public/data/", $tags="data_file")
+
+' ── Relaciones ──
+Rel_D(use_modules, fetch_index, "Carga índice al montar componente")
+Rel_D(use_modules, load_module, "Carga módulo seleccionado por el usuario")
+Rel_D(fetch_index, index_json, "Fetch y parseo del índice")
+Rel_D(load_module, module_json, "Fetch y parseo del módulo")
+Rel_D(load_module, validate_schema, "Valida estructura contra ADR-07")
+Rel_U(module_type, load_module, "Tipo de retorno")
+Rel_U(sign_type, module_type, "Tipo de cada elemento en senas[]")
+Rel_U(module_index, fetch_index, "Tipo de retorno")
+Rel_R(load_module, get_sign_image, "Resuelve rutas de imágenes")
+
+SHOW_LEGEND()
+
+@enduml
